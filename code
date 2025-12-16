@@ -1,0 +1,1784 @@
+<!doctype html>
+<html lang="en" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hostel Management System</title>
+  <script src="/_sdk/data_sdk.js"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      box-sizing: border-box;
+    }
+    
+    .fade-in {
+      animation: fadeIn 0.3s ease-in;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .slide-up {
+      animation: slideUp 0.4s ease-out;
+    }
+    
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .pulse-animation {
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+ </head>
+ <body class="h-full">
+  <div id="app" class="h-full w-full overflow-auto"></div>
+  <script>
+    const defaultConfig = {
+      app_title: "Hostel Management System",
+      hostel_name: "Smuct Hostel",
+      breakfast_menu: "Tea, Bread, Butter, Eggs",
+      lunch_menu: "Rice, Dal, Curry, Salad, Roti",
+      dinner_menu: "Roti, Paneer, Rice, Sweet Dish",
+      per_meal_cost: "50",
+      monthly_bed_cost: "2500",
+      background_color: "#f0f4f8",
+      primary_color: "#3b82f6",
+      card_color: "#ffffff",
+      text_color: "#1f2937",
+      accent_color: "#10b981",
+      font_family: "Inter",
+      font_size: 16
+    };
+
+    let currentUser = null;
+    let allStudents = [];
+    let allMealSelections = [];
+    let currentView = 'login';
+
+    const dataHandler = {
+      onDataChanged(data) {
+        allStudents = data.filter(item => item.type === 'student');
+        allMealSelections = data.filter(item => item.type === 'meal_selection');
+        
+        if (currentView === 'dashboard') {
+          renderDashboard();
+        } else if (currentView === 'admin') {
+          renderAdminDashboard();
+        }
+      }
+    };
+
+    async function onConfigChange(config) {
+      const customFont = config.font_family || defaultConfig.font_family;
+      const baseSize = config.font_size || defaultConfig.font_size;
+      const baseFontStack = 'system-ui, -apple-system, sans-serif';
+      
+      document.body.style.fontFamily = `${customFont}, ${baseFontStack}`;
+      document.body.style.fontSize = `${baseSize}px`;
+      document.body.style.backgroundColor = config.background_color || defaultConfig.background_color;
+      
+      const app = document.getElementById('app');
+      if (app) {
+        app.style.backgroundColor = config.background_color || defaultConfig.background_color;
+      }
+
+      if (currentView === 'login') renderLogin();
+      else if (currentView === 'signup') renderSignup();
+      else if (currentView === 'dashboard') renderDashboard();
+      else if (currentView === 'admin') renderAdminDashboard();
+    }
+
+    function canSelectMeal(mealType) {
+      const now = new Date();
+      const currentHour = now.getHours();
+      
+      // Breakfast: 4:00 AM - 9:00 AM (can select until 5:00 AM)
+      if (mealType === 'breakfast') {
+        return currentHour >= 0 && currentHour < 5;
+      }
+      // Lunch: 11:00 AM - 3:00 PM (can select until 8:00 AM)
+      else if (mealType === 'lunch') {
+        return currentHour >= 0 && currentHour < 8;
+      }
+      // Dinner: 7:00 PM - 10:00 PM (can select until 3:00 PM)
+      else if (mealType === 'dinner') {
+        return currentHour >= 0 && currentHour < 15;
+      }
+      return false;
+    }
+
+    function getMealDeadline(mealType) {
+      if (mealType === 'breakfast') return '5:00 AM';
+      if (mealType === 'lunch') return '8:00 AM';
+      if (mealType === 'dinner') return '3:00 PM';
+      return '';
+    }
+
+    function getTodayMealSelection(studentId) {
+      const today = new Date().toISOString().split('T')[0];
+      return allMealSelections.find(m => 
+        m.student_id === studentId && m.date === today
+      );
+    }
+
+    function renderLogin() {
+      const config = window.elementSdk.config;
+      const app = document.getElementById('app');
+      
+      app.innerHTML = `
+        <div class="min-h-full flex items-center justify-center p-4" style="background-color: ${config.background_color || defaultConfig.background_color};">
+          <div class="w-full max-w-md">
+            <div class="slide-up rounded-2xl shadow-2xl p-8" style="background-color: ${config.card_color || defaultConfig.card_color};">
+              <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4 shadow-lg" style="background: linear-gradient(135deg, ${config.primary_color || defaultConfig.primary_color}, ${config.accent_color || defaultConfig.accent_color});">
+                  <svg class="w-10 h-10" fill="white" viewBox="0 0 24 24">
+                    <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+                  </svg>
+                </div>
+                <h1 class="font-bold mb-1" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 2}px;">
+                  ${config.hostel_name || defaultConfig.hostel_name}
+                </h1>
+                <p class="font-medium mb-2" style="color: ${config.primary_color || defaultConfig.primary_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">
+                  ${config.app_title || defaultConfig.app_title}
+                </p>
+                <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                  Student Login Portal
+                </p>
+              </div>
+
+              <form id="loginForm" class="space-y-6">
+                <div>
+                  <label for="loginStudentId" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                    Student ID or Email
+                  </label>
+                  <input 
+                    type="text" 
+                    id="loginStudentId" 
+                    required
+                    class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none transition-colors"
+                    style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                    placeholder="Student ID or Email"
+                  />
+                </div>
+
+                <div>
+                  <label for="loginPassword" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                    Password
+                  </label>
+                  <input 
+                    type="password" 
+                    id="loginPassword" 
+                    required
+                    class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none transition-colors"
+                    style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                    placeholder="Enter your password"
+                  />
+                </div>
+
+                <button 
+                  type="submit"
+                  class="w-full py-3 rounded-lg font-semibold text-white shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+                  style="background-color: ${config.primary_color || defaultConfig.primary_color}; font-size: ${config.font_size || defaultConfig.font_size}px;"
+                >
+                  Sign In
+                </button>
+              </form>
+
+              <div class="mt-6 space-y-3 text-center">
+                <button 
+                  id="showSignup"
+                  class="font-medium hover:underline block w-full"
+                  style="color: ${config.primary_color || defaultConfig.primary_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;"
+                >
+                  Don't have an account? Sign Up
+                </button>
+                <button 
+                  id="adminLogin"
+                  class="font-medium hover:underline block w-full"
+                  style="color: ${config.accent_color || defaultConfig.accent_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;"
+                >
+                  🔐 Admin Access
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('loginForm').addEventListener('submit', handleLogin);
+      document.getElementById('showSignup').addEventListener('click', () => {
+        currentView = 'signup';
+        renderSignup();
+      });
+      document.getElementById('adminLogin').addEventListener('click', () => {
+        showAdminLoginModal();
+      });
+    }
+
+    function renderSignup() {
+      const config = window.elementSdk.config;
+      const app = document.getElementById('app');
+      
+      app.innerHTML = `
+        <div class="min-h-full flex items-center justify-center p-4" style="background-color: ${config.background_color || defaultConfig.background_color};">
+          <div class="w-full max-w-md">
+            <div class="slide-up rounded-2xl shadow-2xl p-8" style="background-color: ${config.card_color || defaultConfig.card_color};">
+              <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4" style="background-color: ${config.accent_color || defaultConfig.accent_color};">
+                  <svg class="w-8 h-8" fill="white" viewBox="0 0 24 24">
+                    <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                  </svg>
+                </div>
+                <h1 class="font-bold mb-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.75}px;">
+                  Student Registration
+                </h1>
+                <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                  Create your hostel account
+                </p>
+              </div>
+
+              <form id="signupForm" class="space-y-4">
+                <div>
+                  <label for="signupStudentId" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                    Student ID <span style="color: #ef4444;">*</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    id="signupStudentId" 
+                    required
+                    class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none transition-colors"
+                    style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                    placeholder="Enter Student ID"
+                  />
+                </div>
+
+                <div>
+                  <label for="signupName" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                    Full Name
+                  </label>
+                  <input 
+                    type="text" 
+                    id="signupName" 
+                    required
+                    class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none transition-colors"
+                    style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                    placeholder="John Doe"
+                  />
+                </div>
+
+                <div>
+                  <label for="signupEmail" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                    Email Address
+                  </label>
+                  <input 
+                    type="email" 
+                    id="signupEmail" 
+                    required
+                    class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none transition-colors"
+                    style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                    placeholder="student@hostel.com"
+                  />
+                </div>
+
+                <div>
+                  <label for="signupRoom" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                    Room Number
+                  </label>
+                  <input 
+                    type="text" 
+                    id="signupRoom" 
+                    required
+                    class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none transition-colors"
+                    style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                    placeholder="101"
+                  />
+                </div>
+
+                <div>
+                  <label for="signupPhone" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                    Phone Number
+                  </label>
+                  <input 
+                    type="tel" 
+                    id="signupPhone" 
+                    required
+                    class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none transition-colors"
+                    style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                    placeholder="+91 9876543210"
+                  />
+                </div>
+
+                <div>
+                  <label for="signupPassword" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                    Password <span style="color: #ef4444;">*</span>
+                  </label>
+                  <input 
+                    type="password" 
+                    id="signupPassword" 
+                    required
+                    class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none transition-colors"
+                    style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                    placeholder="Create a password"
+                  />
+                </div>
+
+                <div>
+                  <label for="signupAdvance" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                    Advance Payment (₹)
+                  </label>
+                  <input 
+                    type="number" 
+                    id="signupAdvance" 
+                    required
+                    class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none transition-colors"
+                    style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                    placeholder="5000"
+                  />
+                </div>
+
+                <div>
+                  <label for="signupPaymentMethod" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                    Payment Method <span style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.5; font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">(Optional)</span>
+                  </label>
+                  <select 
+                    id="signupPaymentMethod"
+                    class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none transition-colors"
+                    style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                  >
+                    <option value="">Not Selected</option>
+                    <option value="bKash">bKash</option>
+                    <option value="Rocket">Rocket</option>
+                    <option value="Upay">Upay</option>
+                    <option value="Nagad">Nagad</option>
+                    <option value="Hand Cash">Hand Cash</option>
+                  </select>
+                </div>
+
+                <button 
+                  type="submit"
+                  class="w-full py-3 rounded-lg font-semibold text-white shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+                  style="background-color: ${config.accent_color || defaultConfig.accent_color}; font-size: ${config.font_size || defaultConfig.font_size}px;"
+                >
+                  Create Account
+                </button>
+              </form>
+
+              <div class="mt-6 text-center">
+                <button 
+                  id="showLogin"
+                  class="font-medium hover:underline"
+                  style="color: ${config.primary_color || defaultConfig.primary_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;"
+                >
+                  Already have an account? Sign In
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('signupForm').addEventListener('submit', handleSignup);
+      document.getElementById('showLogin').addEventListener('click', () => {
+        currentView = 'login';
+        renderLogin();
+      });
+    }
+
+    function renderDashboard() {
+      const config = window.elementSdk.config;
+      const app = document.getElementById('app');
+      
+      const mealCost = parseFloat(config.per_meal_cost || defaultConfig.per_meal_cost);
+      const todaySelection = getTodayMealSelection(currentUser.id);
+      
+      const breakfastSelected = todaySelection?.breakfast_selected || false;
+      const lunchSelected = todaySelection?.lunch_selected || false;
+      const dinnerSelected = todaySelection?.dinner_selected || false;
+
+      const canSelectBreakfast = canSelectMeal('breakfast');
+      const canSelectLunch = canSelectMeal('lunch');
+      const canSelectDinner = canSelectMeal('dinner');
+
+      const student = allStudents.find(s => s.id === currentUser.id) || currentUser;
+      const balance = (student.advance_payment || 0) - (student.total_food_cost || 0);
+
+      app.innerHTML = `
+        <div class="h-full w-full" style="background-color: ${config.background_color || defaultConfig.background_color};">
+          <!-- Header -->
+          <header class="shadow-md" style="background-color: ${config.primary_color || defaultConfig.primary_color};">
+            <div class="px-4 py-4 flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-full flex items-center justify-center" style="background-color: rgba(255,255,255,0.2);">
+                  <svg class="w-6 h-6" fill="white" viewBox="0 0 24 24">
+                    <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
+                  </svg>
+                </div>
+                <div>
+                  <h1 class="font-bold text-white" style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.25}px;">
+                    ${config.app_title || defaultConfig.app_title}
+                  </h1>
+                  <p class="text-white opacity-90" style="font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">
+                    ${student.name} - Room ${student.room_number}
+                  </p>
+                </div>
+              </div>
+              <button id="logoutBtn" class="px-4 py-2 rounded-lg bg-white bg-opacity-20 text-white font-medium hover:bg-opacity-30 transition-all" style="font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                Logout
+              </button>
+            </div>
+          </header>
+
+          <div class="p-4 space-y-6 pb-24">
+            <!-- Balance Card -->
+            <div class="fade-in rounded-2xl shadow-lg p-6" style="background-color: ${config.card_color || defaultConfig.card_color};">
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                    Available Balance
+                  </p>
+                  <h2 class="font-bold ${balance < 100 ? 'pulse-animation' : ''}" style="color: ${balance < 100 ? '#ef4444' : config.accent_color || defaultConfig.accent_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 2}px;">
+                    ৳${balance.toFixed(2)}
+                  </h2>
+                  <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">
+                    Student ID: ${student.student_id || student.id} | Payment: ${student.payment_method || 'Not Selected'}
+                  </p>
+                </div>
+                <div class="text-5xl">💰</div>
+              </div>
+              
+              <!-- Add Money Section -->
+              <div class="border-t-2 border-gray-100 pt-4 mt-4">
+                <button id="addMoneyBtn" class="w-full py-3 rounded-lg font-semibold text-white shadow-lg hover:shadow-xl transition-all" style="background-color: ${config.accent_color || defaultConfig.accent_color}; font-size: ${config.font_size || defaultConfig.font_size}px;">
+                  💳 Add Money to Balance
+                </button>
+              </div>
+              
+              <!-- Cost Breakdown for 30 Days -->
+              <div class="border-t-2 border-gray-100 pt-4 space-y-2">
+                <h3 class="font-semibold mb-3" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">
+                  30-Day Cost Breakdown
+                </h3>
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="p-3 rounded-lg" style="background-color: ${config.background_color || defaultConfig.background_color};">
+                    <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">
+                      Monthly Bed Cost
+                    </p>
+                    <p class="font-bold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">
+                      ৳${student.monthly_fee || parseFloat(config.monthly_bed_cost || defaultConfig.monthly_bed_cost)}
+                    </p>
+                  </div>
+                  <div class="p-3 rounded-lg" style="background-color: ${config.background_color || defaultConfig.background_color};">
+                    <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">
+                      Food Cost (${student.total_meals_taken || 0} meals)
+                    </p>
+                    <p class="font-bold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">
+                      ৳${(student.total_food_cost || 0).toFixed(2)}
+                    </p>
+                  </div>
+                  <div class="p-3 rounded-lg" style="background-color: ${config.primary_color || defaultConfig.primary_color};">
+                    <p class="text-white opacity-90" style="font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">
+                      Total Cost
+                    </p>
+                    <p class="font-bold text-white" style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">
+                      ৳${((student.monthly_fee || parseFloat(config.monthly_bed_cost || defaultConfig.monthly_bed_cost)) + (student.total_food_cost || 0)).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+                <div class="p-3 rounded-lg mt-3" style="background-color: ${config.accent_color || defaultConfig.accent_color};">
+                  <div class="flex items-center justify-between">
+                    <p class="text-white font-semibold" style="font-size: ${config.font_size || defaultConfig.font_size}px;">
+                      Advance Paid
+                    </p>
+                    <p class="font-bold text-white" style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.25}px;">
+                      ৳${student.advance_payment || 0}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Today's Meal Selection -->
+            <div class="fade-in rounded-2xl shadow-lg p-6" style="background-color: ${config.card_color || defaultConfig.card_color};">
+              <div class="flex items-center space-x-3 mb-4">
+                <div class="w-12 h-12 rounded-full flex items-center justify-center" style="background-color: ${config.accent_color || defaultConfig.accent_color};">
+                  <span class="text-2xl">🍽️</span>
+                </div>
+                <div>
+                  <h2 class="font-bold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">
+                    Select Today's Meals
+                  </h2>
+                  <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                    ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                  </p>
+                </div>
+              </div>
+
+              <div class="space-y-4">
+                <!-- Breakfast -->
+                <div class="p-4 rounded-xl border-2 ${breakfastSelected ? 'border-green-500' : 'border-gray-200'}" style="background-color: ${config.background_color || defaultConfig.background_color};">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center space-x-2">
+                      <span class="text-2xl">🌅</span>
+                      <h3 class="font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">
+                        Breakfast
+                      </h3>
+                    </div>
+                    <button 
+                      id="toggleBreakfast"
+                      ${!canSelectBreakfast ? 'disabled' : ''}
+                      class="px-4 py-2 rounded-lg font-semibold text-white transition-all ${!canSelectBreakfast ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg'}"
+                      style="background-color: ${breakfastSelected ? '#ef4444' : config.accent_color || defaultConfig.accent_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;"
+                    >
+                      ${breakfastSelected ? '✓ Selected' : '+ Select'}
+                    </button>
+                  </div>
+                  <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8; font-size: ${config.font_size || defaultConfig.font_size}px; margin-bottom: 8px;">
+                    ${config.breakfast_menu || defaultConfig.breakfast_menu}
+                  </p>
+                  ${!canSelectBreakfast ? `
+                    <p style="color: #ef4444; font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">
+                      ⏰ Selection closed. Must select before ${getMealDeadline('breakfast')}
+                    </p>
+                  ` : `
+                    <p style="color: ${config.accent_color || defaultConfig.accent_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">
+                      ⏰ Select before ${getMealDeadline('breakfast')}
+                    </p>
+                  `}
+                </div>
+
+                <!-- Lunch -->
+                <div class="p-4 rounded-xl border-2 ${lunchSelected ? 'border-green-500' : 'border-gray-200'}" style="background-color: ${config.background_color || defaultConfig.background_color};">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center space-x-2">
+                      <span class="text-2xl">☀️</span>
+                      <h3 class="font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">
+                        Lunch
+                      </h3>
+                    </div>
+                    <button 
+                      id="toggleLunch"
+                      ${!canSelectLunch ? 'disabled' : ''}
+                      class="px-4 py-2 rounded-lg font-semibold text-white transition-all ${!canSelectLunch ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg'}"
+                      style="background-color: ${lunchSelected ? '#ef4444' : config.accent_color || defaultConfig.accent_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;"
+                    >
+                      ${lunchSelected ? '✓ Selected' : '+ Select'}
+                    </button>
+                  </div>
+                  <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8; font-size: ${config.font_size || defaultConfig.font_size}px; margin-bottom: 8px;">
+                    ${config.lunch_menu || defaultConfig.lunch_menu}
+                  </p>
+                  ${!canSelectLunch ? `
+                    <p style="color: #ef4444; font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">
+                      ⏰ Selection closed. Must select before ${getMealDeadline('lunch')}
+                    </p>
+                  ` : `
+                    <p style="color: ${config.accent_color || defaultConfig.accent_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">
+                      ⏰ Select before ${getMealDeadline('lunch')}
+                    </p>
+                  `}
+                </div>
+
+                <!-- Dinner -->
+                <div class="p-4 rounded-xl border-2 ${dinnerSelected ? 'border-green-500' : 'border-gray-200'}" style="background-color: ${config.background_color || defaultConfig.background_color};">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center space-x-2">
+                      <span class="text-2xl">🌙</span>
+                      <h3 class="font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">
+                        Dinner
+                      </h3>
+                    </div>
+                    <button 
+                      id="toggleDinner"
+                      ${!canSelectDinner ? 'disabled' : ''}
+                      class="px-4 py-2 rounded-lg font-semibold text-white transition-all ${!canSelectDinner ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg'}"
+                      style="background-color: ${dinnerSelected ? '#ef4444' : config.accent_color || defaultConfig.accent_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;"
+                    >
+                      ${dinnerSelected ? '✓ Selected' : '+ Select'}
+                    </button>
+                  </div>
+                  <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8; font-size: ${config.font_size || defaultConfig.font_size}px; margin-bottom: 8px;">
+                    ${config.dinner_menu || defaultConfig.dinner_menu}
+                  </p>
+                  ${!canSelectDinner ? `
+                    <p style="color: #ef4444; font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">
+                      ⏰ Selection closed. Must select before ${getMealDeadline('dinner')}
+                    </p>
+                  ` : `
+                    <p style="color: ${config.accent_color || defaultConfig.accent_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">
+                      ⏰ Select before ${getMealDeadline('dinner')}
+                    </p>
+                  `}
+                </div>
+
+                <!-- Today's Cost - Permanently Visible (Fixed at Bottom) -->
+                <div class="p-4 rounded-xl shadow-2xl" style="background-color: ${config.primary_color || defaultConfig.primary_color}; position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; margin: 0;">
+                  <div class="flex items-center justify-between max-w-4xl mx-auto px-4">
+                    <p class="text-white font-semibold" style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">
+                      Today's Meal Cost:
+                    </p>
+                    <p class="text-white font-bold" style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">
+                      ৳${((breakfastSelected ? 1 : 0) + (lunchSelected ? 1 : 0) + (dinnerSelected ? 1 : 0)) * mealCost}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+      document.getElementById('addMoneyBtn').addEventListener('click', showAddMoneyModal);
+      
+      if (canSelectBreakfast) {
+        document.getElementById('toggleBreakfast').addEventListener('click', () => toggleMeal('breakfast', breakfastSelected));
+      }
+      if (canSelectLunch) {
+        document.getElementById('toggleLunch').addEventListener('click', () => toggleMeal('lunch', lunchSelected));
+      }
+      if (canSelectDinner) {
+        document.getElementById('toggleDinner').addEventListener('click', () => toggleMeal('dinner', dinnerSelected));
+      }
+    }
+
+    function renderAdminDashboard() {
+      const config = window.elementSdk.config;
+      const app = document.getElementById('app');
+      
+      const mealCost = parseFloat(config.per_meal_cost || defaultConfig.per_meal_cost);
+      const totalStudents = allStudents.length;
+      const totalRevenue = allStudents.reduce((sum, s) => sum + (s.advance_payment || 0), 0);
+      const totalFoodCost = allStudents.reduce((sum, s) => sum + (s.total_food_cost || 0), 0);
+      
+      const today = new Date().toISOString().split('T')[0];
+      const todaySelections = allMealSelections.filter(m => m.date === today);
+      const todayBreakfast = todaySelections.filter(m => m.breakfast_selected).length;
+      const todayLunch = todaySelections.filter(m => m.lunch_selected).length;
+      const todayDinner = todaySelections.filter(m => m.dinner_selected).length;
+
+      app.innerHTML = `
+        <div class="h-full w-full" style="background-color: ${config.background_color || defaultConfig.background_color};">
+          <!-- Header -->
+          <header class="shadow-md" style="background-color: ${config.accent_color || defaultConfig.accent_color};">
+            <div class="px-4 py-4 flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-full flex items-center justify-center" style="background-color: rgba(255,255,255,0.2);">
+                  <span class="text-2xl">👨‍💼</span>
+                </div>
+                <div>
+                  <h1 class="font-bold text-white" style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.25}px;">
+                    Admin Dashboard
+                  </h1>
+                  <p class="text-white opacity-90" style="font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">
+                    Manage Students & Meals
+                  </p>
+                </div>
+              </div>
+              <button id="adminLogout" class="px-4 py-2 rounded-lg bg-white bg-opacity-20 text-white font-medium hover:bg-opacity-30 transition-all" style="font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                Back
+              </button>
+            </div>
+          </header>
+
+          <div class="p-4 space-y-6 pb-24">
+            <!-- Stats Grid -->
+            <div class="grid grid-cols-2 gap-4">
+              <div class="fade-in rounded-xl shadow-lg p-4" style="background-color: ${config.card_color || defaultConfig.card_color};">
+                <div class="text-center">
+                  <div class="text-3xl mb-2">👥</div>
+                  <div class="font-bold mb-1" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.75}px;">
+                    ${totalStudents}
+                  </div>
+                  <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                    Total Students
+                  </p>
+                </div>
+              </div>
+
+              <div class="fade-in rounded-xl shadow-lg p-4" style="background-color: ${config.card_color || defaultConfig.card_color};">
+                <div class="text-center">
+                  <div class="text-3xl mb-2">💰</div>
+                  <div class="font-bold mb-1" style="color: ${config.accent_color || defaultConfig.accent_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">
+                    ৳${totalRevenue.toLocaleString()}
+                  </div>
+                  <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                    Total Advance
+                  </p>
+                </div>
+              </div>
+
+              <div class="fade-in rounded-xl shadow-lg p-4" style="background-color: ${config.card_color || defaultConfig.card_color};">
+                <div class="text-center">
+                  <div class="text-3xl mb-2">🍽️</div>
+                  <div class="font-bold mb-1" style="color: ${config.primary_color || defaultConfig.primary_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.75}px;">
+                    ${allStudents.reduce((sum, s) => sum + (s.total_meals_taken || 0), 0)}
+                  </div>
+                  <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                    Total Meals
+                  </p>
+                </div>
+              </div>
+
+              <div class="fade-in rounded-xl shadow-lg p-4" style="background-color: ${config.card_color || defaultConfig.card_color};">
+                <div class="text-center">
+                  <div class="text-3xl mb-2">📊</div>
+                  <div class="font-bold mb-1" style="color: #f59e0b; font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">
+                    ৳${totalFoodCost.toLocaleString()}
+                  </div>
+                  <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                    Food Revenue
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Today's Meal Count -->
+            <div class="fade-in rounded-2xl shadow-lg p-6" style="background-color: ${config.card_color || defaultConfig.card_color};">
+              <h2 class="font-bold mb-4" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">
+                Today's Meal Selection
+              </h2>
+              <div class="space-y-3">
+                <button id="viewBreakfastBtn" class="w-full flex items-center justify-between p-3 rounded-lg hover:shadow-md transition-all" style="background-color: ${config.background_color || defaultConfig.background_color};">
+                  <div class="flex items-center space-x-2">
+                    <span class="text-xl">🌅</span>
+                    <span class="font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${config.font_size || defaultConfig.font_size}px;">Breakfast</span>
+                  </div>
+                  <span class="font-bold" style="color: ${config.accent_color || defaultConfig.accent_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.25}px;">${todayBreakfast} students →</span>
+                </button>
+                <button id="viewLunchBtn" class="w-full flex items-center justify-between p-3 rounded-lg hover:shadow-md transition-all" style="background-color: ${config.background_color || defaultConfig.background_color};">
+                  <div class="flex items-center space-x-2">
+                    <span class="text-xl">☀️</span>
+                    <span class="font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${config.font_size || defaultConfig.font_size}px;">Lunch</span>
+                  </div>
+                  <span class="font-bold" style="color: ${config.accent_color || defaultConfig.accent_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.25}px;">${todayLunch} students →</span>
+                </button>
+                <button id="viewDinnerBtn" class="w-full flex items-center justify-between p-3 rounded-lg hover:shadow-md transition-all" style="background-color: ${config.background_color || defaultConfig.background_color};">
+                  <div class="flex items-center space-x-2">
+                    <span class="text-xl">🌙</span>
+                    <span class="font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${config.font_size || defaultConfig.font_size}px;">Dinner</span>
+                  </div>
+                  <span class="font-bold" style="color: ${config.accent_color || defaultConfig.accent_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.25}px;">${todayDinner} students →</span>
+                </button>
+                <div class="flex items-center justify-between p-3 rounded-lg" style="background-color: ${config.primary_color || defaultConfig.primary_color};">
+                  <span class="font-semibold text-white" style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">Today's Revenue</span>
+                  <span class="font-bold text-white" style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">৳${((todayBreakfast + todayLunch + todayDinner) * mealCost).toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Student List -->
+            <div class="fade-in rounded-2xl shadow-lg p-6" style="background-color: ${config.card_color || defaultConfig.card_color};">
+              <div class="flex items-center justify-between mb-4">
+                <h2 class="font-bold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">
+                  All Students
+                </h2>
+                <button id="addStudentBtn" class="px-4 py-2 rounded-lg text-white font-medium shadow-lg hover:shadow-xl transition-all" style="background-color: ${config.primary_color || defaultConfig.primary_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                  + Add Student
+                </button>
+              </div>
+
+              <div id="studentList" class="space-y-3">
+                ${allStudents.length === 0 ? `
+                  <div class="text-center py-8">
+                    <div class="text-6xl mb-4">📋</div>
+                    <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; font-size: ${config.font_size || defaultConfig.font_size}px;">
+                      No students added yet
+                    </p>
+                  </div>
+                ` : allStudents.map(student => {
+                  const balance = (student.advance_payment || 0) - (student.total_food_cost || 0);
+                  return `
+                    <div class="p-4 rounded-xl border-2 border-gray-100">
+                      <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center space-x-3">
+                          <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white" style="background-color: ${config.primary_color || defaultConfig.primary_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">
+                            ${student.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <h3 class="font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">
+                              ${student.name}
+                            </h3>
+                            <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                              Room ${student.room_number} | ${student.email}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="grid grid-cols-3 gap-2">
+                        <div class="text-center p-2 rounded-lg" style="background-color: ${config.background_color || defaultConfig.background_color};">
+                          <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">
+                            Balance
+                          </p>
+                          <p class="font-semibold" style="color: ${balance < 100 ? '#ef4444' : config.accent_color || defaultConfig.accent_color}; font-size: ${config.font_size || defaultConfig.font_size}px;">
+                            ৳${balance.toFixed(2)}
+                          </p>
+                        </div>
+                        <div class="text-center p-2 rounded-lg" style="background-color: ${config.background_color || defaultConfig.background_color};">
+                          <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">
+                            Meals
+                          </p>
+                          <p class="font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${config.font_size || defaultConfig.font_size}px;">
+                            ${student.total_meals_taken || 0}
+                          </p>
+                        </div>
+                        <div class="text-center p-2 rounded-lg" style="background-color: ${config.background_color || defaultConfig.background_color};">
+                          <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">
+                            Spent
+                          </p>
+                          <p class="font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${config.font_size || defaultConfig.font_size}px;">
+                            ৳${(student.total_food_cost || 0).toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('adminLogout').addEventListener('click', () => {
+        currentView = 'login';
+        renderLogin();
+      });
+      document.getElementById('addStudentBtn').addEventListener('click', showAddStudentModal);
+      document.getElementById('viewBreakfastBtn').addEventListener('click', () => showMealSelectionModal('breakfast'));
+      document.getElementById('viewLunchBtn').addEventListener('click', () => showMealSelectionModal('lunch'));
+      document.getElementById('viewDinnerBtn').addEventListener('click', () => showMealSelectionModal('dinner'));
+    }
+
+    async function toggleMeal(mealType, currentState) {
+      const config = window.elementSdk.config;
+      const mealCost = parseFloat(config.per_meal_cost || defaultConfig.per_meal_cost);
+      const today = new Date().toISOString().split('T')[0];
+      
+      let selection = getTodayMealSelection(currentUser.id);
+      
+      const newState = !currentState;
+      
+      // Update student data FIRST before creating/updating selection
+      const student = allStudents.find(s => s.id === currentUser.id);
+      
+      if (!selection) {
+        // New selection - add cost immediately if selecting
+        if (student && newState) {
+          student.total_meals_taken = (student.total_meals_taken || 0) + 1;
+          student.total_food_cost = (student.total_food_cost || 0) + mealCost;
+          const updateResult = await window.dataSdk.update(student);
+          if (!updateResult.isOk) {
+            showToast('Failed to update balance', 'error');
+            return;
+          }
+        }
+        
+        selection = {
+          id: 'meal_' + Date.now(),
+          type: 'meal_selection',
+          student_id: currentUser.id,
+          date: today,
+          breakfast_selected: mealType === 'breakfast' ? newState : false,
+          lunch_selected: mealType === 'lunch' ? newState : false,
+          dinner_selected: mealType === 'dinner' ? newState : false,
+          created_at: new Date().toISOString()
+        };
+        
+        const result = await window.dataSdk.create(selection);
+        if (result.isOk) {
+          if (newState) {
+            showMealConfirmation(mealType);
+          } else {
+            showToast(`${mealType.charAt(0).toUpperCase() + mealType.slice(1)} removed!`, 'success');
+          }
+        } else {
+          // Rollback student update if selection creation failed
+          if (student && newState) {
+            student.total_meals_taken = (student.total_meals_taken || 0) - 1;
+            student.total_food_cost = (student.total_food_cost || 0) - mealCost;
+            await window.dataSdk.update(student);
+          }
+          showToast('Failed to update meal selection', 'error');
+        }
+      } else {
+        const oldState = selection[`${mealType}_selected`];
+        
+        // Update student cost FIRST
+        if (student) {
+          if (newState && !oldState) {
+            // Selecting meal - add cost
+            student.total_meals_taken = (student.total_meals_taken || 0) + 1;
+            student.total_food_cost = (student.total_food_cost || 0) + mealCost;
+          } else if (!newState && oldState) {
+            // Deselecting meal - remove cost
+            student.total_meals_taken = Math.max(0, (student.total_meals_taken || 0) - 1);
+            student.total_food_cost = Math.max(0, (student.total_food_cost || 0) - mealCost);
+          }
+          const updateResult = await window.dataSdk.update(student);
+          if (!updateResult.isOk) {
+            showToast('Failed to update balance', 'error');
+            return;
+          }
+        }
+        
+        selection[`${mealType}_selected`] = newState;
+        
+        const result = await window.dataSdk.update(selection);
+        if (result.isOk) {
+          if (newState) {
+            showMealConfirmation(mealType);
+          } else {
+            showToast(`${mealType.charAt(0).toUpperCase() + mealType.slice(1)} removed!`, 'success');
+          }
+        } else {
+          // Rollback student update if selection update failed
+          if (student) {
+            if (newState && !oldState) {
+              student.total_meals_taken = (student.total_meals_taken || 0) - 1;
+              student.total_food_cost = (student.total_food_cost || 0) - mealCost;
+            } else if (!newState && oldState) {
+              student.total_meals_taken = (student.total_meals_taken || 0) + 1;
+              student.total_food_cost = (student.total_food_cost || 0) + mealCost;
+            }
+            await window.dataSdk.update(student);
+          }
+          showToast('Failed to update meal selection', 'error');
+        }
+      }
+    }
+
+    function showMealConfirmation(mealType) {
+      const config = window.elementSdk.config;
+      const confirmationBox = document.createElement('div');
+      confirmationBox.className = 'fixed bottom-24 left-1/2 transform -translate-x-1/2 px-8 py-6 rounded-2xl shadow-2xl z-50 fade-in';
+      confirmationBox.style.backgroundColor = config.accent_color || defaultConfig.accent_color;
+      confirmationBox.style.minWidth = '300px';
+      
+      confirmationBox.innerHTML = `
+        <div class="text-center">
+          <div class="text-5xl mb-3">✅</div>
+          <p class="text-white font-bold mb-2" style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.25}px;">
+            ${mealType.charAt(0).toUpperCase() + mealType.slice(1)} Confirmed!
+          </p>
+          <p class="text-white opacity-90" style="font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+            Cost deducted from balance
+          </p>
+          <div class="mt-3 text-white opacity-75" style="font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">
+            Cancel within <span id="countdown">60</span> seconds
+          </div>
+          <button id="cancelMealBtn" class="mt-4 w-full py-2 rounded-lg bg-white bg-opacity-20 text-white font-semibold hover:bg-opacity-30 transition-all" style="font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+            🚫 Cancel This Meal
+          </button>
+        </div>
+      `;
+      
+      document.body.appendChild(confirmationBox);
+      
+      let countdown = 60;
+      let isCancelled = false;
+      const countdownElement = confirmationBox.querySelector('#countdown');
+      const cancelBtn = confirmationBox.querySelector('#cancelMealBtn');
+      
+      cancelBtn.addEventListener('click', async () => {
+        if (isCancelled) return;
+        isCancelled = true;
+        
+        cancelBtn.disabled = true;
+        cancelBtn.textContent = 'Cancelling...';
+        
+        // Cancel the meal
+        await toggleMeal(mealType, true);
+        
+        clearInterval(interval);
+        confirmationBox.style.opacity = '0';
+        confirmationBox.style.transform = 'translate(-50%, 20px)';
+        confirmationBox.style.transition = 'all 0.3s ease-out';
+        setTimeout(() => {
+          if (document.body.contains(confirmationBox)) {
+            document.body.removeChild(confirmationBox);
+          }
+        }, 300);
+        
+        showToast(`${mealType.charAt(0).toUpperCase() + mealType.slice(1)} cancelled successfully!`, 'success');
+      });
+      
+      const interval = setInterval(() => {
+        if (isCancelled) {
+          clearInterval(interval);
+          return;
+        }
+        
+        countdown--;
+        if (countdownElement) {
+          countdownElement.textContent = countdown;
+        }
+        
+        if (countdown <= 0) {
+          clearInterval(interval);
+          confirmationBox.style.opacity = '0';
+          confirmationBox.style.transform = 'translate(-50%, 20px)';
+          confirmationBox.style.transition = 'all 0.3s ease-out';
+          setTimeout(() => {
+            if (document.body.contains(confirmationBox)) {
+              document.body.removeChild(confirmationBox);
+            }
+          }, 300);
+        }
+      }, 1000);
+    }
+
+    function showAddStudentModal() {
+      if (allStudents.length >= 999) {
+        showToast('Maximum limit of 999 students reached', 'error');
+        return;
+      }
+
+      const config = window.elementSdk.config;
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 flex items-center justify-center p-4 z-50';
+      modal.style.backgroundColor = 'rgba(0,0,0,0.5)';
+      
+      modal.innerHTML = `
+        <div class="w-full max-w-md rounded-2xl shadow-2xl p-6 fade-in" style="background-color: ${config.card_color || defaultConfig.card_color};">
+          <h2 class="font-bold mb-6" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">
+            Add New Student
+          </h2>
+
+          <form id="addStudentForm" class="space-y-4">
+            <div>
+              <label for="studentName" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                Student Name
+              </label>
+              <input 
+                type="text" 
+                id="studentName" 
+                required
+                class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                placeholder="Enter name"
+              />
+            </div>
+
+            <div>
+              <label for="studentEmail" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                Email
+              </label>
+              <input 
+                type="email" 
+                id="studentEmail" 
+                required
+                class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                placeholder="student@hostel.com"
+              />
+            </div>
+
+            <div>
+              <label for="studentRoom" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                Room Number
+              </label>
+              <input 
+                type="text" 
+                id="studentRoom" 
+                required
+                class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                placeholder="101"
+              />
+            </div>
+
+            <div>
+              <label for="studentPhone" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                Phone
+              </label>
+              <input 
+                type="tel" 
+                id="studentPhone" 
+                required
+                class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                placeholder="+91 9876543210"
+              />
+            </div>
+
+            <div>
+              <label for="studentAdvance" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                Advance Payment (₹)
+              </label>
+              <input 
+                type="number" 
+                id="studentAdvance" 
+                required
+                class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                placeholder="5000"
+              />
+            </div>
+
+            <div>
+              <label for="studentPaymentMethod" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                Payment Method
+              </label>
+              <select 
+                id="studentPaymentMethod" 
+                required
+                class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+              >
+                <option value="">Select Payment Method</option>
+                <option value="bKash">bKash</option>
+                <option value="Rocket">Rocket</option>
+                <option value="Upay">Upay</option>
+                <option value="Nagad">Nagad</option>
+                <option value="Hand Cash">Hand Cash</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="studentMonthlyFee" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                Monthly Hostel Fee (₹)
+              </label>
+              <input 
+                type="number" 
+                id="studentMonthlyFee" 
+                required
+                class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                placeholder="5000"
+              />
+            </div>
+
+            <div>
+              <label for="studentOther" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                Other Charges (₹)
+              </label>
+              <input 
+                type="number" 
+                id="studentOther" 
+                required
+                class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                placeholder="500"
+              />
+            </div>
+
+            <div class="flex space-x-3 mt-6">
+              <button 
+                type="button"
+                id="cancelBtn"
+                class="flex-1 py-3 rounded-lg font-medium border-2 border-gray-200 hover:bg-gray-50 transition-colors"
+                style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${config.font_size || defaultConfig.font_size}px;"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit"
+                class="flex-1 py-3 rounded-lg font-semibold text-white shadow-lg hover:shadow-xl transition-all"
+                style="background-color: ${config.primary_color || defaultConfig.primary_color}; font-size: ${config.font_size || defaultConfig.font_size}px;"
+              >
+                Add Student
+              </button>
+            </div>
+          </form>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      document.getElementById('cancelBtn').addEventListener('click', () => {
+        document.body.removeChild(modal);
+      });
+
+      document.getElementById('addStudentForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Adding...';
+
+        const studentData = {
+          id: 'student_' + Date.now(),
+          type: 'student',
+          name: document.getElementById('studentName').value,
+          email: document.getElementById('studentEmail').value,
+          room_number: document.getElementById('studentRoom').value,
+          phone: document.getElementById('studentPhone').value,
+          advance_payment: Number(document.getElementById('studentAdvance').value),
+          payment_method: document.getElementById('studentPaymentMethod').value,
+          monthly_fee: Number(document.getElementById('studentMonthlyFee').value),
+          other_charges: Number(document.getElementById('studentOther').value),
+          payment_status: 'pending',
+          total_meals_taken: 0,
+          total_food_cost: 0,
+          created_at: new Date().toISOString()
+        };
+
+        const result = await window.dataSdk.create(studentData);
+        
+        if (result.isOk) {
+          showToast('Student added successfully!', 'success');
+          document.body.removeChild(modal);
+        } else {
+          showToast('Failed to add student. Please try again.', 'error');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Add Student';
+        }
+      });
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      
+      const identifier = document.getElementById('loginStudentId').value;
+      const password = document.getElementById('loginPassword').value;
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Signing In...';
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const user = allStudents.find(s => 
+        (s.email === identifier || s.id === identifier || s.student_id === identifier) && 
+        s.password === password
+      );
+      
+      if (user) {
+        currentUser = user;
+        currentView = 'dashboard';
+        renderDashboard();
+        showToast('Welcome back!', 'success');
+      } else {
+        showToast('Invalid credentials. Check your ID and password!', 'error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Sign In';
+      }
+    }
+
+    async function handleSignup(e) {
+      e.preventDefault();
+      
+      if (allStudents.length >= 999) {
+        showToast('Maximum limit of 999 students reached', 'error');
+        return;
+      }
+
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Creating Account...';
+
+      const config = window.elementSdk.config;
+      const studentId = document.getElementById('signupStudentId').value;
+      const password = document.getElementById('signupPassword').value;
+      const paymentMethod = document.getElementById('signupPaymentMethod').value;
+      
+      const userData = {
+        id: 'student_' + Date.now(),
+        type: 'student',
+        student_id: studentId,
+        password: password,
+        name: document.getElementById('signupName').value,
+        email: document.getElementById('signupEmail').value,
+        room_number: document.getElementById('signupRoom').value,
+        phone: document.getElementById('signupPhone').value,
+        advance_payment: Number(document.getElementById('signupAdvance').value),
+        payment_method: paymentMethod || 'Not Selected',
+        monthly_fee: parseFloat(config.monthly_bed_cost || defaultConfig.monthly_bed_cost),
+        other_charges: 0,
+        payment_status: 'pending',
+        total_meals_taken: 0,
+        total_food_cost: 0,
+        created_at: new Date().toISOString()
+      };
+
+      const result = await window.dataSdk.create(userData);
+      
+      if (result.isOk) {
+        currentUser = userData;
+        currentView = 'dashboard';
+        renderDashboard();
+        showToast('Account created successfully!', 'success');
+      } else {
+        showToast('Failed to create account. Please try again.', 'error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create Account';
+      }
+    }
+
+    function handleLogout() {
+      currentUser = null;
+      currentView = 'login';
+      renderLogin();
+      showToast('Logged out successfully', 'success');
+    }
+
+    function showAddMoneyModal() {
+      const config = window.elementSdk.config;
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 flex items-center justify-center p-4 z-50';
+      modal.style.backgroundColor = 'rgba(0,0,0,0.5)';
+      
+      modal.innerHTML = `
+        <div class="w-full max-w-md rounded-2xl shadow-2xl p-6 fade-in max-h-[90%] overflow-auto" style="background-color: ${config.card_color || defaultConfig.card_color};">
+          <h2 class="font-bold mb-6 text-center" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">
+            💳 Add Money Request
+          </h2>
+
+          <form id="addMoneyForm" class="space-y-4">
+            <div>
+              <label for="amountToAdd" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                Amount (৳) <span style="color: #ef4444;">*</span>
+              </label>
+              <input 
+                type="number" 
+                id="amountToAdd" 
+                required
+                min="1"
+                class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                placeholder="Enter amount"
+              />
+            </div>
+
+            <div>
+              <label for="studentIdForPayment" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                Your Student ID <span style="color: #ef4444;">*</span>
+              </label>
+              <input 
+                type="text" 
+                id="studentIdForPayment" 
+                required
+                class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                placeholder="Enter your Student ID"
+                value="${currentUser.student_id || currentUser.id}"
+                readonly
+              />
+            </div>
+
+            <div>
+              <label for="paymentType" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                Select Payment Method <span style="color: #ef4444;">*</span>
+              </label>
+              <select 
+                id="paymentType"
+                required
+                class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+              >
+                <option value="">Select Method</option>
+                <option value="bKash">bKash</option>
+                <option value="Rocket">Rocket</option>
+                <option value="Upay">Upay</option>
+                <option value="Nagad">Nagad</option>
+              </select>
+            </div>
+
+            <div id="paymentAccountSection" style="display: none;">
+              <label for="paymentAccount" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                Payment Account Number <span style="color: #ef4444;">*</span>
+              </label>
+              <div class="p-4 rounded-lg mb-3" style="background-color: ${config.background_color || defaultConfig.background_color};">
+                <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px; margin-bottom: 8px;">
+                  Send money to this account:
+                </p>
+                <p class="font-bold text-center py-2" style="color: ${config.primary_color || defaultConfig.primary_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.25}px;">
+                  01796572777
+                </p>
+              </div>
+            </div>
+
+            <div id="senderNumberSection" style="display: none;">
+              <label for="senderNumber" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                Your Payment Number <span style="color: #ef4444;">*</span>
+              </label>
+              <input 
+                type="tel" 
+                id="senderNumber" 
+                class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                placeholder="Enter your payment number"
+              />
+            </div>
+
+            <div id="passwordSection" style="display: none;">
+              <label for="paymentPassword" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                Payment Account Password <span style="color: #ef4444;">*</span>
+              </label>
+              <input 
+                type="password" 
+                id="paymentPassword" 
+                class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                placeholder="Enter your payment password"
+              />
+            </div>
+
+            <div class="flex space-x-3 mt-6">
+              <button 
+                type="button"
+                id="cancelAddMoney"
+                class="flex-1 py-3 rounded-lg font-medium border-2 border-gray-200 hover:bg-gray-50 transition-colors"
+                style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${config.font_size || defaultConfig.font_size}px;"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit"
+                class="flex-1 py-3 rounded-lg font-semibold text-white shadow-lg hover:shadow-xl transition-all"
+                style="background-color: ${config.accent_color || defaultConfig.accent_color}; font-size: ${config.font_size || defaultConfig.font_size}px;"
+              >
+                Submit Request
+              </button>
+            </div>
+          </form>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      const paymentTypeSelect = document.getElementById('paymentType');
+      const paymentAccountSection = document.getElementById('paymentAccountSection');
+      const senderNumberSection = document.getElementById('senderNumberSection');
+      const passwordSection = document.getElementById('passwordSection');
+      const senderNumberInput = document.getElementById('senderNumber');
+      const passwordInput = document.getElementById('paymentPassword');
+
+      paymentTypeSelect.addEventListener('change', (e) => {
+        const method = e.target.value;
+        if (method && method !== 'Hand Cash') {
+          paymentAccountSection.style.display = 'block';
+          senderNumberSection.style.display = 'block';
+          passwordSection.style.display = 'block';
+          senderNumberInput.required = true;
+          passwordInput.required = true;
+        } else {
+          paymentAccountSection.style.display = 'none';
+          senderNumberSection.style.display = 'none';
+          passwordSection.style.display = 'none';
+          senderNumberInput.required = false;
+          passwordInput.required = false;
+        }
+      });
+
+      document.getElementById('cancelAddMoney').addEventListener('click', () => {
+        document.body.removeChild(modal);
+      });
+
+      document.getElementById('addMoneyForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Processing...';
+
+        const amount = Number(document.getElementById('amountToAdd').value);
+        const paymentMethod = document.getElementById('paymentType').value;
+        const senderNumber = document.getElementById('senderNumber').value;
+        const password = document.getElementById('paymentPassword').value;
+
+        const student = allStudents.find(s => s.id === currentUser.id);
+        if (student) {
+          student.advance_payment = (student.advance_payment || 0) + amount;
+          student.payment_method = paymentMethod;
+          
+          const result = await window.dataSdk.update(student);
+          
+          if (result.isOk) {
+            showToast(`৳${amount} added successfully via ${paymentMethod}!`, 'success');
+            document.body.removeChild(modal);
+            renderDashboard();
+          } else {
+            showToast('Failed to add money. Please try again.', 'error');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Submit Request';
+          }
+        }
+      });
+    }
+
+    function showMealSelectionModal(mealType) {
+      const config = window.elementSdk.config;
+      const today = new Date().toISOString().split('T')[0];
+      const todaySelections = allMealSelections.filter(m => m.date === today && m[`${mealType}_selected`]);
+      
+      const studentsWithMeal = todaySelections.map(selection => {
+        const student = allStudents.find(s => s.id === selection.student_id);
+        return student;
+      }).filter(s => s);
+
+      const mealEmoji = mealType === 'breakfast' ? '🌅' : mealType === 'lunch' ? '☀️' : '🌙';
+      const mealTitle = mealType.charAt(0).toUpperCase() + mealType.slice(1);
+
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 flex items-center justify-center p-4 z-50';
+      modal.style.backgroundColor = 'rgba(0,0,0,0.5)';
+      
+      modal.innerHTML = `
+        <div class="w-full max-w-2xl rounded-2xl shadow-2xl p-6 fade-in max-h-[80%] overflow-auto" style="background-color: ${config.card_color || defaultConfig.card_color};">
+          <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center space-x-3">
+              <span class="text-4xl">${mealEmoji}</span>
+              <h2 class="font-bold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">
+                ${mealTitle} Selection
+              </h2>
+            </div>
+            <button id="closeMealModal" class="text-3xl hover:opacity-70 transition-opacity" style="color: ${config.text_color || defaultConfig.text_color};">
+              ×
+            </button>
+          </div>
+
+          <p class="mb-4" style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${config.font_size || defaultConfig.font_size}px;">
+            ${studentsWithMeal.length} students selected ${mealType} today
+          </p>
+
+          ${studentsWithMeal.length === 0 ? `
+            <div class="text-center py-8">
+              <div class="text-6xl mb-4">🍽️</div>
+              <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; font-size: ${config.font_size || defaultConfig.font_size}px;">
+                No students selected ${mealType} yet
+              </p>
+            </div>
+          ` : `
+            <div class="space-y-3">
+              ${studentsWithMeal.map((student, index) => `
+                <div class="p-4 rounded-xl border-2 border-gray-100 flex items-center justify-between">
+                  <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white" style="background-color: ${config.primary_color || defaultConfig.primary_color}; font-size: ${config.font_size || defaultConfig.font_size}px;">
+                      ${index + 1}
+                    </div>
+                    <div>
+                      <h3 class="font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">
+                        ${student.name}
+                      </h3>
+                      <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                        Room ${student.room_number} | ${student.student_id}
+                      </p>
+                    </div>
+                  </div>
+                  <span class="text-2xl">✓</span>
+                </div>
+              `).join('')}
+            </div>
+          `}
+
+          <button id="closeMealModalBtn" class="w-full mt-6 py-3 rounded-lg font-semibold text-white shadow-lg hover:shadow-xl transition-all" style="background-color: ${config.primary_color || defaultConfig.primary_color}; font-size: ${config.font_size || defaultConfig.font_size}px;">
+            Close
+          </button>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      document.getElementById('closeMealModal').addEventListener('click', () => {
+        document.body.removeChild(modal);
+      });
+
+      document.getElementById('closeMealModalBtn').addEventListener('click', () => {
+        document.body.removeChild(modal);
+      });
+    }
+
+    function showAdminLoginModal() {
+      const config = window.elementSdk.config;
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 flex items-center justify-center p-4 z-50';
+      modal.style.backgroundColor = 'rgba(0,0,0,0.5)';
+      
+      modal.innerHTML = `
+        <div class="w-full max-w-md rounded-2xl shadow-2xl p-6 fade-in" style="background-color: ${config.card_color || defaultConfig.card_color};">
+          <div class="text-center mb-6">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4" style="background-color: ${config.accent_color || defaultConfig.accent_color};">
+              <span class="text-3xl">🔐</span>
+            </div>
+            <h2 class="font-bold mb-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">
+              Admin Login
+            </h2>
+            <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+              Enter admin credentials
+            </p>
+          </div>
+
+          <form id="adminLoginForm" class="space-y-4">
+            <div>
+              <label for="adminPhone" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                Phone Number
+              </label>
+              <input 
+                type="text" 
+                id="adminPhone" 
+                required
+                class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                placeholder="01796572777"
+              />
+            </div>
+
+            <div>
+              <label for="adminPassword" class="block mb-2 font-medium" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">
+                Password
+              </label>
+              <input 
+                type="password" 
+                id="adminPassword" 
+                required
+                class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                style="font-size: ${config.font_size || defaultConfig.font_size}px;"
+                placeholder="Enter password"
+              />
+            </div>
+
+            <div class="flex space-x-3 mt-6">
+              <button 
+                type="button"
+                id="cancelAdminLogin"
+                class="flex-1 py-3 rounded-lg font-medium border-2 border-gray-200 hover:bg-gray-50 transition-colors"
+                style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${config.font_size || defaultConfig.font_size}px;"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit"
+                class="flex-1 py-3 rounded-lg font-semibold text-white shadow-lg hover:shadow-xl transition-all"
+                style="background-color: ${config.accent_color || defaultConfig.accent_color}; font-size: ${config.font_size || defaultConfig.font_size}px;"
+              >
+                Login
+              </button>
+            </div>
+          </form>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      document.getElementById('cancelAdminLogin').addEventListener('click', () => {
+        document.body.removeChild(modal);
+      });
+
+      document.getElementById('adminLoginForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const phone = document.getElementById('adminPhone').value;
+        const password = document.getElementById('adminPassword').value;
+        
+        if (phone === '01796572777' && password === '123456789') {
+          document.body.removeChild(modal);
+          currentView = 'admin';
+          renderAdminDashboard();
+          showToast('Admin login successful!', 'success');
+        } else {
+          showToast('Invalid admin credentials!', 'error');
+        }
+      });
+    }
+
+    function showToast(message, type) {
+      const config = window.elementSdk.config;
+      const toast = document.createElement('div');
+      toast.className = 'fixed top-4 right-4 px-6 py-4 rounded-lg shadow-2xl text-white font-medium z-50 fade-in';
+      toast.style.backgroundColor = type === 'success' ? (config.accent_color || defaultConfig.accent_color) : '#ef4444';
+      toast.style.fontSize = `${(config.font_size || defaultConfig.font_size) * 0.875}px`;
+      toast.textContent = message;
+      
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px)';
+        toast.style.transition = 'all 0.3s ease-out';
+        setTimeout(() => document.body.removeChild(toast), 300);
+      }, 3000);
+    }
+
+    async function init() {
+      const initResult = await window.dataSdk.init(dataHandler);
+      if (!initResult.isOk) {
+        console.error("Failed to initialize data SDK");
+        return;
+      }
+
+      await window.elementSdk.init({
+        defaultConfig,
+        onConfigChange,
+        mapToCapabilities: (config) => ({
+          recolorables: [
+            {
+              get: () => config.background_color || defaultConfig.background_color,
+              set: (value) => {
+                config.background_color = value;
+                window.elementSdk.setConfig({ background_color: value });
+              }
+            },
+            {
+              get: () => config.card_color || defaultConfig.card_color,
+              set: (value) => {
+                config.card_color = value;
+                window.elementSdk.setConfig({ card_color: value });
+              }
+            },
+            {
+              get: () => config.text_color || defaultConfig.text_color,
+              set: (value) => {
+                config.text_color = value;
+                window.elementSdk.setConfig({ text_color: value });
+              }
+            },
+            {
+              get: () => config.primary_color || defaultConfig.primary_color,
+              set: (value) => {
+                config.primary_color = value;
+                window.elementSdk.setConfig({ primary_color: value });
+              }
+            },
+            {
+              get: () => config.accent_color || defaultConfig.accent_color,
+              set: (value) => {
+                config.accent_color = value;
+                window.elementSdk.setConfig({ accent_color: value });
+              }
+            }
+          ],
+          borderables: [],
+          fontEditable: {
+            get: () => config.font_family || defaultConfig.font_family,
+            set: (value) => {
+              config.font_family = value;
+              window.elementSdk.setConfig({ font_family: value });
+            }
+          },
+          fontSizeable: {
+            get: () => config.font_size || defaultConfig.font_size,
+            set: (value) => {
+              config.font_size = value;
+              window.elementSdk.setConfig({ font_size: value });
+            }
+          }
+        }),
+        mapToEditPanelValues: (config) => new Map([
+          ["app_title", config.app_title || defaultConfig.app_title],
+          ["hostel_name", config.hostel_name || defaultConfig.hostel_name],
+          ["per_meal_cost", config.per_meal_cost || defaultConfig.per_meal_cost],
+          ["monthly_bed_cost", config.monthly_bed_cost || defaultConfig.monthly_bed_cost],
+          ["breakfast_menu", config.breakfast_menu || defaultConfig.breakfast_menu],
+          ["lunch_menu", config.lunch_menu || defaultConfig.lunch_menu],
+          ["dinner_menu", config.dinner_menu || defaultConfig.dinner_menu]
+        ])
+      });
+
+      renderLogin();
+    }
+
+    init();
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9aeb9d31a22a7c42',t:'MTc2NTg2MTE5NC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
